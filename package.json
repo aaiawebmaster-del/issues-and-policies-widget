@@ -1,0 +1,13 @@
+{
+  "name": "ga-policy-note",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "netlify dev",
+    "build": "mkdir -p dist && cp -R public/. dist/"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^8.2.0"
+  }
+}

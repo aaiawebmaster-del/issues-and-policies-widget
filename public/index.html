@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GA Policy Note API</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; color: #1a242c; }
+    code { background: #f5f7f8; padding: 0.15rem 0.35rem; }
+  </style>
+</head>
+<body>
+  <h1>Government Affairs — Policy Note proxy</h1>
+  <p>Netlify functions keep the PolicyNote API key off the public Sitefinity site.</p>
+  <ul>
+    <li><code>GET /api/policy-note/health</code></li>
+    <li><code>GET /api/policy-note/lookup?bill=H.R.%20906</code> (header <code>x-ga-policy-key</code> when configured)</li>
+    <li><code>/ga-policy-map.js</code> — map client for Issue detail pages</li>
+    <li><code>/ga-layout-hotfix.js</code> — runtime list/detail layout override when old Sitefinity templates are still live</li>
+  </ul>
+</body>
+</html>

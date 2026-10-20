@@ -1,0 +1,45 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  external_node_modules = ["@netlify/blobs"]
+
+[[redirects]]
+  from = "/api/policy-note/lookup"
+  to = "/.netlify/functions/policy-note-lookup"
+  status = 200
+
+[[redirects]]
+  from = "/api/policy-note/batch"
+  to = "/.netlify/functions/policy-note-batch"
+  status = 200
+
+[[redirects]]
+  from = "/api/policy-note/projects"
+  to = "/.netlify/functions/policy-note-projects"
+  status = 200
+
+[[redirects]]
+  from = "/api/policy-note/project"
+  to = "/.netlify/functions/policy-note-project"
+  status = 200
+
+[[redirects]]
+  from = "/api/policy-note/item"
+  to = "/.netlify/functions/policy-note-item"
+  status = 200
+
+[[redirects]]
+  from = "/api/policy-note/health"
+  to = "/.netlify/functions/policy-note-health"
+  status = 200
+
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Headers = "Content-Type, Authorization, x-ga-policy-key"
+    Access-Control-Allow-Methods = "GET, POST, OPTIONS"

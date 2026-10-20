@@ -1,0 +1,193 @@
+// Sitefinity publish hook — Policy Note → cache into Policy fields.
+// Rename to PolicyNotePublishHook.cs and include in the Sitefinity web project.
+// Adjust DynamicModuleTypeName / field accessors for your content type.
+
+using System;
+using System.Collections.Generic;
+using System.Configuration;
+using System.IO;
+using System.Net;
+using System.Text;
+using System.Web.Script.Serialization;
+using Telerik.Sitefinity.Abstractions;
+using Telerik.Sitefinity.Data.Events;
+using Telerik.Sitefinity.DynamicModules;
+using Telerik.Sitefinity.DynamicModules.Model;
+using Telerik.Sitefinity.Services;
+using Telerik.Sitefinity.Utilities.TypeConverters;
+
+namespace Autocare.GovernmentAffairs
+{
+    /// <summary>
+    /// After a Government Affairs Policy item is published, if Bill_number is set,
+    /// call Netlify Policy Note lookup and write region / Bill_status / Policy_page.
+    /// </summary>
+    public static class PolicyNotePublishHook
+    {
+        // TODO: replace with your Dynamic Content type CLR name from Sitefinity Advanced settings.
+        private const string DynamicModuleTypeName =
+            "Telerik.Sitefinity.DynamicTypes.Model.Governmentaffairs.Governmentaffair";
+
+        public static void Register()
+        {
+            EventHub.Subscribe<IDataEvent>(OnDataEvent);
+        }
+
+        private static void OnDataEvent(IDataEvent evt)
+        {
+            try
+            {
+                if (evt == null) return;
+
+                var itemType = TypeResolutionService.ResolveType(DynamicModuleTypeName, throwOnError: false);
+                if (itemType == null) return;
+                if (evt.ItemType != null && evt.ItemType != itemType && !itemType.IsAssignableFrom(evt.ItemType))
+                {
+                    return;
+                }
+
+                var action = evt.Action ?? "";
+                var isPublish =
+                    action.Equals("Publish", StringComparison.OrdinalIgnoreCase) ||
+                    action.Equals("Published", StringComparison.OrdinalIgnoreCase) ||
+                    action.Equals("Updated", StringComparison.OrdinalIgnoreCase);
+                if (!isPublish) return;
+
+                var manager = DynamicModuleManager.GetManager(evt.ProviderName);
+                if (manager == null || evt.ItemId == Guid.Empty) return;
+
+                var item = manager.GetDataItem(itemType, evt.ItemId) as DynamicContent;
+                if (item == null) return;
+
+                // Only Policies (Issue_or_Policy == 2)
+                int typeVal = 0;
+                try
+                {
+                    var raw = Convert.ToString(item.GetValue("Issue_or_Policy")) ?? "";
+                    if (!int.TryParse(raw, out typeVal))
+                    {
+                        if (raw.IndexOf("policy", StringComparison.OrdinalIgnoreCase) >= 0) typeVal = 2;
+                    }
+                }
+                catch { }
+
+                if (typeVal != 2) return;
+
+                string billNumber = "";
+                try { billNumber = Convert.ToString(item.GetValue("Bill_number")) ?? ""; } catch { }
+                billNumber = (billNumber ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(billNumber))
+                {
+                    // Manual entry path — do not overwrite region / status / Policy_page
+                    return;
+                }
+
+                var lookup = LookupBill(billNumber);
+                if (lookup == null) return;
+
+                if (!string.IsNullOrWhiteSpace(lookup.State))
+                {
+                    try { item.SetValue("region", lookup.State); } catch { }
+                }
+
+                if (lookup.StatusValue.HasValue)
+                {
+                    try { item.SetValue("Bill_status", lookup.StatusValue.Value); }
+                    catch
+                    {
+                        try { item.SetValue("Bill_status", lookup.Status); } catch { }
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(lookup.OfficialUrl))
+                {
+                    TrySetPolicyPage(item, lookup.OfficialUrl);
+                }
+
+                manager.Lifecycle.Publish(item);
+                manager.SaveChanges();
+            }
+            catch (Exception ex)
+            {
+                Log.Write(ex, ConfigurationPolicy.ErrorLog);
+            }
+        }
+
+        private static void TrySetPolicyPage(DynamicContent item, string url)
+        {
+            try
+            {
+                item.SetValue("Policy_page", url);
+            }
+            catch
+            {
+                try
+                {
+                    var existing = item.GetValue("Policy_page");
+                    if (existing != null)
+                    {
+                        var prop = existing.GetType().GetProperty("DefaultHref")
+                                   ?? existing.GetType().GetProperty("Href");
+                        if (prop != null && prop.CanWrite) prop.SetValue(existing, url, null);
+                        item.SetValue("Policy_page", existing);
+                    }
+                }
+                catch { }
+            }
+        }
+
+        private class LookupResult
+        {
+            public string State { get; set; }
+            public string Status { get; set; }
+            public int? StatusValue { get; set; }
+            public string OfficialUrl { get; set; }
+        }
+
+        private static LookupResult LookupBill(string billNumber)
+        {
+            var endpoint = ConfigurationManager.AppSettings["GaPolicyNoteLookupUrl"]
+                           ?? Environment.GetEnvironmentVariable("GaPolicyNoteLookupUrl");
+            var proxyKey = ConfigurationManager.AppSettings["GaPolicyNoteProxyKey"]
+                           ?? Environment.GetEnvironmentVariable("GaPolicyNoteProxyKey");
+
+            if (string.IsNullOrWhiteSpace(endpoint)) return null;
+
+            var url = endpoint.Contains("?")
+                ? endpoint + "&bill=" + Uri.EscapeDataString(billNumber) + "&refresh=1"
+                : endpoint.TrimEnd('/') + "?bill=" + Uri.EscapeDataString(billNumber) + "&refresh=1";
+
+            var request = (HttpWebRequest)WebRequest.Create(url);
+            request.Method = "GET";
+            request.Accept = "application/json";
+            request.Timeout = 20000;
+            if (!string.IsNullOrWhiteSpace(proxyKey))
+            {
+                request.Headers["x-ga-policy-key"] = proxyKey;
+            }
+
+            using (var response = (HttpWebResponse)request.GetResponse())
+            using (var stream = response.GetResponseStream())
+            using (var reader = new StreamReader(stream, Encoding.UTF8))
+            {
+                var json = reader.ReadToEnd();
+                var serializer = new JavaScriptSerializer();
+                var dict = serializer.Deserialize<Dictionary<string, object>>(json);
+                if (dict == null) return null;
+
+                var result = new LookupResult();
+                if (dict.ContainsKey("state")) result.State = Convert.ToString(dict["state"]);
+                if (dict.ContainsKey("status")) result.Status = Convert.ToString(dict["status"]);
+                if (dict.ContainsKey("officialUrl")) result.OfficialUrl = Convert.ToString(dict["officialUrl"]);
+                if (dict.ContainsKey("statusValue") && dict["statusValue"] != null)
+                {
+                    try { result.StatusValue = Convert.ToInt32(dict["statusValue"]); } catch { }
+                }
+                return result;
+            }
+        }
+    }
+}
+
+// Wire-up (Global.asax Application_Start or a Sitefinity module Initialize):
+// Autocare.GovernmentAffairs.PolicyNotePublishHook.Register();
