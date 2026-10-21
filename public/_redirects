@@ -1,0 +1,8 @@
+/api/policy-note/lookup /.netlify/functions/policy-note-lookup 200
+/api/policy-note/batch /.netlify/functions/policy-note-batch 200
+/api/policy-note/projects /.netlify/functions/policy-note-projects 200
+/api/policy-note/project /.netlify/functions/policy-note-project 200
+/api/policy-note/item /.netlify/functions/policy-note-item 200
+/api/policy-note/actions /.netlify/functions/policy-note-actions 200
+/api/policy-note/health /.netlify/functions/policy-note-health 200
+/api/congress/bill /.netlify/functions/policy-note-lookup 200

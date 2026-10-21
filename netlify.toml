@@ -33,6 +33,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/policy-note/actions"
+  to = "/.netlify/functions/policy-note-actions"
+  status = 200
+
+[[redirects]]
   from = "/api/policy-note/health"
   to = "/.netlify/functions/policy-note-health"
   status = 200

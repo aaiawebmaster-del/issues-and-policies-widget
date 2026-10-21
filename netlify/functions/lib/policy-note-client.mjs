@@ -534,3 +534,128 @@ export async function lookupItem(kind, id) {
   if (firstError && firstError.code !== 'NOT_FOUND') throw firstError;
   throw fail(`No ${k} found for id "${pnId}"`, 'NOT_FOUND');
 }
+
+const PUBLISH_TAG = 'publishtoautocareorg';
+
+function compactName(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function asText(value) {
+  return String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
+}
+
+function personLabel(person) {
+  if (!person || typeof person !== 'object') return asText(person);
+  const named = [person.first_name, person.last_name].map(asText).filter(Boolean).join(' ');
+  return named || asText(person.name) || asText(person.email);
+}
+
+function linkedRows(action) {
+  const rows = action.linked_entities || action.linked_items || action.linkedEntities || [];
+  return (Array.isArray(rows) ? rows : []).map((row) => ({
+    id: asText(row && (row.id || row.lookup_id || row.entity_id)),
+    billNumber: asText(row && (row.primary_external_id || row.bill_number || row.billNumber)),
+    title: asText(row && (row.title || row.name)),
+    documentType: asText(row && (row.document_type || row.entity_type)),
+  })).filter((row) => row.id || row.billNumber || row.title);
+}
+
+/**
+ * Actions tagged PublishtoAutoCareOrg.
+ * projectName limits to one issue. id / billNumber keep only actions linked to that policy.
+ */
+export async function listPublishedActions({ projectName = '', id = '', billNumber = '' } = {}) {
+  const { tags, projects } = await listProjects();
+  const tag = (tags || []).find((row) => compactName(row && row.name) === PUBLISH_TAG);
+  if (!tag || !tag.id) return { actions: [], tag: 'missing' };
+
+  const wantedProjects = String(projectName).split(',').map((name) => compactName(name)).filter(Boolean);
+  const projectIds = wantedProjects.length
+    ? (projects || []).filter((row) => wantedProjects.includes(compactName(row && row.name))).map((row) => row && row.id).filter(Boolean)
+    : [];
+  if (wantedProjects.length && !projectIds.length) return { actions: [], tag: tag.id, project: 'missing' };
+  const body = {
+    authentication_token: getKeyId(),
+    tags: [tag.id],
+    limit: 100,
+  };
+  if (projectIds.length) body.projects = projectIds;
+
+  async function searchActions(extra) {
+    const found = [];
+    let token = '';
+    for (let page = 0; page < 4; page++) {
+      const payload = await apiPost('/v1/appdata/actions/search', token ? { ...body, ...extra, continuation_token: token } : { ...body, ...extra }, 'actions');
+      const rows = Array.isArray(payload?.actions) ? payload.actions : [];
+      found.push(...rows);
+      token = asText(payload && payload.continuation_token);
+      if (!token || found.length >= 100) break;
+    }
+    return found;
+  }
+
+  const briefs = await searchActions({});
+  const linkedHits = new Set();
+  if (id) {
+    (await searchActions({ linked_item_ids: [id] })).forEach((row) => {
+      const key = asText(row && row.id);
+      if (key) linkedHits.add(key);
+      if (!briefs.some((existing) => asText(existing && existing.id) === key)) briefs.push(row);
+    });
+  }
+
+  const ids = briefs.map((row) => asText(row && row.id)).filter(Boolean).slice(0, 100);
+  const fullById = new Map();
+  if (ids.length) {
+    const fetched = await apiPost('/v1/appdata/actions/fetch', {
+      authentication_token: getKeyId(),
+      ids,
+    }, 'actions');
+    const full = Array.isArray(fetched?.actions) ? fetched.actions : Array.isArray(fetched) ? fetched : [];
+    full.forEach((row) => {
+      const key = asText(row && (row.id || row.action_id));
+      if (key) fullById.set(key, row);
+    });
+  }
+
+  const wantId = asText(id);
+  const wantBill = compactName(billNumber);
+  const actions = briefs.map((brief) => {
+    const full = fullById.get(asText(brief && brief.id)) || {};
+    const linked = linkedRows(full);
+    const when = asText(brief && (brief.action_date || brief.start_time)) || asText(full.start_time);
+    return {
+      id: asText(brief && brief.id),
+      title: asText(brief && brief.title) || asText(full.name) || asText(full.title),
+      summary: asText(full.summary) || asText(brief && brief.summary),
+      when: when.length >= 10 ? when.slice(0, 10) : when,
+      type: asText(brief && brief.action_type_label) || asText(full.type),
+      attendees: (Array.isArray(full.attendees) ? full.attendees : []).map(personLabel).filter(Boolean),
+      linked,
+    };
+  }).filter((action) => {
+    if (!wantId && !wantBill) return true;
+    if (linkedHits.has(action.id)) return true;
+    return action.linked.some((row) =>
+      (wantId && (row.id === wantId || row.billNumber === wantId))
+      || (wantBill && compactName(row.billNumber) === wantBill));
+  });
+
+  const resolved = new Set();
+  for (const action of actions) {
+    for (const row of action.linked) {
+      if ((row.title && row.billNumber) || !row.id || resolved.has(row.id) || resolved.size >= 12) continue;
+      resolved.add(row.id);
+      try {
+        const kind = /reg/i.test(row.documentType || '') ? 'regulation' : 'legislation';
+        const item = await lookupItem(kind, row.id);
+        row.title = row.title || item.title || '';
+        row.billNumber = row.billNumber || item.billNumber || item.identifier || '';
+        row.policyNoteId = item.policyNoteId || row.id;
+      } catch { /* a fusion id that will not resolve still leaves the action itself */ }
+    }
+  }
+
+  return { actions, tag: tag.id, project: projectIds.join(',') };
+}

@@ -27,6 +27,7 @@ export async function handler(event) {
       projects: '/api/policy-note/projects',
       project: '/api/policy-note/project?name=ADAS  (commas combine projects; refresh=1, raw=1)',
       item: '/api/policy-note/item?kind=legislation|regulation&id=',
+      actions: '/api/policy-note/actions?project=',
       health: '/api/policy-note/health',
       authCheck: '/api/policy-note/health?check=1',
       congress: '/api/congress/bill?bill=H.R. 906',
