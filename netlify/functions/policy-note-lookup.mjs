@@ -1,5 +1,6 @@
 import { connectBlobs, getCachedLookup, isCacheFresh, setCachedLookup } from './lib/cache.mjs';
 import { isFederalBill, resolveCongressBill } from './lib/congress.mjs';
+import { isExecutiveOrder, resolveExecutiveOrder } from './lib/federal-register.mjs';
 import { assertProxyKey, corsHeaders, errorResponse, jsonResponse } from './lib/http.mjs';
 import { normalizeLegislationRecord } from './lib/normalize.mjs';
 import { fetchAppData, lookupLegislation, normalizeAppData, searchLegislation } from './lib/policy-note-client.mjs';
@@ -56,6 +57,13 @@ export async function handler(event) {
     }
 
     const ttlHours = process.env.POLICY_NOTE_CACHE_TTL_HOURS || '168';
+    if (isExecutiveOrder(billNumber)) {
+      const order = await resolveExecutiveOrder(billNumber, ttlHours, flag(event, 'refresh'));
+      if (order && order.notFound) {
+        return jsonResponse(404, { error: `No executive order found for "${billNumber}"`, code: 'NOT_FOUND', cache: order.cache || 'miss' });
+      }
+      return jsonResponse(200, order);
+    }
     if (isFederalBill(billNumber)) {
       const federal = await resolveCongressBill(billNumber, ttlHours, flag(event, 'refresh'));
       if (federal && federal.notFound) {

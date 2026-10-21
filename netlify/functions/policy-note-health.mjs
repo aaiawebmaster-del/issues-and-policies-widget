@@ -21,7 +21,7 @@ export async function handler(event) {
     hasCongressKey: Boolean(String(process.env.CONGRESS_API_KEY || '').trim()),
     baseUrl: getBaseUrl(),
     endpoints: {
-      lookup: '/api/policy-note/lookup?bill=',
+      lookup: '/api/policy-note/lookup?bill=  (H.R. 906, OR HB 4144, or Federal Register document number 2026-21599)',
       raw: '/api/policy-note/lookup?bill=&raw=1',
       batch: '/api/policy-note/batch?bills=A|B|C',
       projects: '/api/policy-note/projects',
