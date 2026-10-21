@@ -1,3 +1,5 @@
+import { resolveCongressBill } from './lib/congress.mjs';
+import { connectBlobs } from './lib/cache.mjs';
 import { assertProxyKey, corsHeaders, jsonResponse } from './lib/http.mjs';
 import { checkAppData, checkAuth, getApiKey, getBaseUrl } from './lib/policy-note-client.mjs';
 
@@ -16,6 +18,7 @@ export async function handler(event) {
     hasApiKey,
     hasBearer: hasApiKey,
     hasProxyKey,
+    hasCongressKey: Boolean(String(process.env.CONGRESS_API_KEY || '').trim()),
     baseUrl: getBaseUrl(),
     endpoints: {
       lookup: '/api/policy-note/lookup?bill=',
@@ -26,8 +29,23 @@ export async function handler(event) {
       item: '/api/policy-note/item?kind=legislation|regulation&id=',
       health: '/api/policy-note/health',
       authCheck: '/api/policy-note/health?check=1',
+      congress: '/api/congress/bill?bill=H.R. 906',
     },
   };
+
+  /* ?congress=1 asks Congress.gov for H.R. 1 of the current congress, to prove CONGRESS_API_KEY works */
+  if (['1', 'true'].includes(String(event.queryStringParameters?.congress || '').toLowerCase())) {
+    connectBlobs(event);
+    try {
+      const sample = await resolveCongressBill('H.R. 1', '1', true);
+      body.congressAuth = sample && !sample.notFound ? 'ok' : 'failed';
+      if (sample && sample.notFound) body.congressError = 'H.R. 1 was not found';
+    } catch (err) {
+      body.ok = false;
+      body.congressAuth = 'failed';
+      body.congressError = err.message;
+    }
+  }
 
   /* ?check=1 trades the API key for a token to prove PolicyNote accepts it */
   if (['1', 'true'].includes(String(event.queryStringParameters?.check || '').toLowerCase())) {

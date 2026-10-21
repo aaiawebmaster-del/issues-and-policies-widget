@@ -1,4 +1,5 @@
 import { connectBlobs, getCachedLookup, isCacheFresh, setCachedLookup } from './lib/cache.mjs';
+import { resolveCongressBill } from './lib/congress.mjs';
 import { assertProxyKey, corsHeaders, errorResponse, jsonResponse } from './lib/http.mjs';
 import { normalizeBillKey } from './lib/normalize.mjs';
 import { lookupLegislation } from './lib/policy-note-client.mjs';
@@ -31,6 +32,8 @@ function readBills(event) {
 }
 
 async function resolveBill(bill, ttlHours, refresh) {
+  const federal = await resolveCongressBill(bill, ttlHours, refresh);
+  if (federal) return federal;
   if (!refresh) {
     const cached = await getCachedLookup(bill);
     if (cached && isCacheFresh(cached, ttlHours)) return { ...cached, cache: 'hit' };

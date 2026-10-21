@@ -1,4 +1,5 @@
 import { connectBlobs, getCachedLookup, isCacheFresh, setCachedLookup } from './lib/cache.mjs';
+import { isFederalBill, resolveCongressBill } from './lib/congress.mjs';
 import { assertProxyKey, corsHeaders, errorResponse, jsonResponse } from './lib/http.mjs';
 import { normalizeLegislationRecord } from './lib/normalize.mjs';
 import { fetchAppData, lookupLegislation, normalizeAppData, searchLegislation } from './lib/policy-note-client.mjs';
@@ -55,6 +56,13 @@ export async function handler(event) {
     }
 
     const ttlHours = process.env.POLICY_NOTE_CACHE_TTL_HOURS || '168';
+    if (isFederalBill(billNumber)) {
+      const federal = await resolveCongressBill(billNumber, ttlHours, flag(event, 'refresh'));
+      if (federal && federal.notFound) {
+        return jsonResponse(404, { error: `No federal bill found for "${billNumber}"`, code: 'NOT_FOUND', cache: federal.cache || 'miss' });
+      }
+      return jsonResponse(200, federal);
+    }
     if (!flag(event, 'refresh')) {
       const cached = await getCachedLookup(billNumber);
       if (cached && isCacheFresh(cached, ttlHours)) {

@@ -6,13 +6,16 @@
 2. Set env vars (never commit secrets), then redeploy:
    - `POLICY_NOTE_API_KEY` (or the older `POLICY_NOTE_BEARER_TOKEN`): the full PolicyNote `key_prod_...` key
    - `GA_POLICY_PROXY_KEY` (generate a long random string)
+   - `CONGRESS_API_KEY`: the api.congress.gov key. Federal bill numbers (`H.R. 906`, `S. 123`, or `119 HR 906`) are looked up here instead of PolicyNote. State bills are unchanged.
    - `POLICY_NOTE_BASE_URL` (optional; default `https://data.policynote.com`)
    - `POLICY_NOTE_KEY_ID` (optional): the `key_id` half of the API key, sent as `authentication_token` on app-data calls. Blank = the part of `POLICY_NOTE_API_KEY` before the dot.
    Use **Same value for all deploy contexts** so Production gets the same values.
    Deploys come from GitHub (`aaiawebmaster-del/issues-and-policies-widget`, branch `main`, this folder is the repo root): push to `main` and Netlify builds and bundles the functions. Don't drag-and-drop (it skips the build and `netlify/functions`, so endpoints 404).
-   Check: the deploy summary lists 6 functions, and `/.netlify/functions/policy-note-project` without the key answers 401 (deployed), not 404.
+   Check: the deploy summary lists the functions, and `/.netlify/functions/policy-note-project` without the key answers 401 (deployed), not 404.
 3. Confirm (send header `x-ga-policy-key`):
-   - `GET /api/policy-note/health` → `hasApiKey: true`, `hasProxyKey: true`
+   - `GET /api/policy-note/health` → `hasApiKey: true`, `hasProxyKey: true`, `hasCongressKey: true`
+   - `GET /api/policy-note/health?congress=1` → `congressAuth: "ok"` (Congress.gov accepted `CONGRESS_API_KEY`)
+   - `GET /api/congress/bill?bill=H.R.%201` → a federal bill (`source: "congress"`, status, title, `officialUrl` on congress.gov)
    - `GET /api/policy-note/health?check=1` → `policyNoteAuth: "ok"` (PolicyNote accepted the API key) and `appData.status: "ok"` with project / tag counts (the key_id works for app data)
    - `GET /api/policy-note/projects` → every PolicyNote project (formerly "issue") and tag on the account
    - `GET /api/policy-note/lookup?bill=OR%20HB%204144` → normalized record

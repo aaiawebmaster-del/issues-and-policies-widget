@@ -37,6 +37,11 @@
   to = "/.netlify/functions/policy-note-health"
   status = 200
 
+[[redirects]]
+  from = "/api/congress/bill"
+  to = "/.netlify/functions/policy-note-lookup"
+  status = 200
+
 [[headers]]
   for = "/api/*"
   [headers.values]
