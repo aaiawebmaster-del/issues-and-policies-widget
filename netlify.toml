@@ -43,6 +43,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/policy-note/tariff"
+  to = "/.netlify/functions/tariff-tracker"
+  status = 200
+
+[[redirects]]
   from = "/api/congress/bill"
   to = "/.netlify/functions/policy-note-lookup"
   status = 200

@@ -14,7 +14,9 @@ Live site: `https://zingy-macaron-49ae92.netlify.app`
 | `GET /api/policy-note/lookup?bill=` | One bill, normalized + cached in Netlify Blobs |
 | `GET /api/policy-note/lookup?bill=&raw=1` | The matched PolicyNote record next to the normalized result (uncached) — use it to check `lib/normalize.mjs` |
 | `GET /api/policy-note/batch?bills=A\|B\|C` | Up to 50 bills in one call (used by the Sitefinity Policies list + detail templates) |
+| `GET /api/policy-note/tariff?ids=` | Tariff tracker: status, key details, current HTS rates and a timeline from the Federal Register and USITC (see below) |
 | `/ga-policy-map.js` | Issue / Topic detail map client |
+| `/tariff-check.html` | Staff preview for tariff tracking entries (asks for the proxy key, keeps it in the browser session only) |
 
 Header on every call: `x-ga-policy-key: <GA_POLICY_PROXY_KEY>` (required once the key is set).
 
@@ -48,6 +50,35 @@ Add `&refresh=1` to bypass the cache. "Not found" answers are cached for 12 hour
   "cache": "hit"
 }
 ```
+
+## Federal Register documents in `lookup` / `batch`
+
+Bill numbers that are a Federal Register identifier are answered from the Federal Register API (no key):
+`EO 14257`, `Proc 10896` (or `Proclamation 10896`), `FR 2026-20510`. Executive orders and proclamations come back as
+`kind: "executive-order"`; agency notices and rules as `kind: "regulation"` with agencies, publication / effective dates and comment deadline.
+
+## Tariff tracker
+
+`GET /api/policy-note/tariff?ids=EO 14257|EO 14266|HTS 9903.01.25` (or `POST {"ids": "one\nper\nline"}`). Cached 6 hours; `&refresh=1` rebuilds.
+The Policy detail template sends the policy's Bill number followed by its **Tariff tracking** field, one entry per line:
+
+| Entry | Meaning |
+|---|---|
+| `EO 14257`, `Proc 10896`, `FR 2026-20510` | Federal Register documents; the first one is the primary document |
+| `HTS 9903.01.25` | Current additional duty for a heading from the USITC HTS API (cached 24 hours) |
+| `docket: USTR-2026-0265` | Newest documents filed under a docket |
+| `search: "section 301" china` | Newest documents matching a Federal Register search |
+| `agency: trade-representative-office-of-united-states` | Limits `search:` lines to an agency (Federal Register agency slug; repeatable) |
+| `status: Paused for 90 days` | Shown as the status instead of the computed one |
+| `authority: Section 232, Trade Expansion Act of 1962` | Shown instead of the detected legal authority |
+
+Computed status, in order: the `status:` line; **Revoked** / **Superseded** when the primary order's Federal Register notes say so;
+**Modified** when a listed, docket or search document is newer than the primary; **Pending** before the effective date; otherwise **In effect**.
+The Federal Register does not record court rulings or other ends to a program, so use `status:` for those.
+
+Response: `status`, `keyDetails` (authority, primary document, dates, agencies, latest change), `rates`, `timeline` (newest first,
+`relation` = primary / listed / docket / search), `relatedActions` (from the primary order's "See" / "Amended by" / "Revoked by" notes),
+`sources`, `warnings` (entries that weren't recognized or found).
 
 ## Env vars (Netlify UI → Site configuration → Environment variables)
 

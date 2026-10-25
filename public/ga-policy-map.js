@@ -127,7 +127,8 @@
       officialUrl: safeUrl(p.officialUrl || p.policyPageUrl || ''),
       state: state,
       region: p.region || p.state || '',
-      isFederal: federal
+      isFederal: federal,
+      kind: (p.kind || 'legislation').toLowerCase()
     };
   }
 
@@ -180,9 +181,38 @@
       });
     }
 
+    function extraFilterState() {
+      var search = root.querySelector('[data-ga-map-search]');
+      var jurOn = root.querySelector('[data-ga-map-jur] .is-on');
+      var kindOn = root.querySelector('[data-ga-map-kind] .is-on');
+      return {
+        query: search && search.value ? String(search.value).toLowerCase().trim() : '',
+        jurisdiction: jurOn ? (jurOn.getAttribute('data-ga-jur') || '') : '',
+        kind: kindOn ? (kindOn.getAttribute('data-ga-kind') || '') : ''
+      };
+    }
+
+    function matchesExtra(p, extra) {
+      if (extra.query) {
+        var hay = ((p.title || '') + ' ' + (p.billNumber || '') + ' ' + (p.state || '') + ' ' +
+          (p.region || '') + ' ' + (p.blurb || '')).toLowerCase();
+        if (hay.indexOf(extra.query) === -1) return false;
+      }
+      var jurisdiction = (p.jurisdiction || '').toLowerCase();
+      if (extra.jurisdiction === 'federal' && jurisdiction !== 'national') return false;
+      if (extra.jurisdiction === 'local' && jurisdiction !== 'state') return false;
+      var kind = (p.kind || 'legislation').toLowerCase();
+      if (extra.kind === 'legislation' && kind !== 'legislation' && kind !== 'executive-order') return false;
+      if (extra.kind === 'regulation' && kind !== 'regulation') return false;
+      return true;
+    }
+
     function filteredList(list) {
-      if (activeStatus === 'all') return list.slice();
-      return list.filter(function (p) { return p.statusKey === activeStatus; });
+      var extra = extraFilterState();
+      return list.filter(function (p) {
+        if (activeStatus !== 'all' && p.statusKey !== activeStatus) return false;
+        return matchesExtra(p, extra);
+      });
     }
 
     function buildMapData() {
@@ -240,10 +270,7 @@
     }
 
     function visiblePolicies() {
-      return policies.filter(function (p) {
-        if (activeStatus !== 'all' && p.statusKey !== activeStatus) return false;
-        return true;
-      });
+      return filteredList(policies);
     }
 
     function renderPolicyCard(p) {
@@ -454,6 +481,38 @@
     }
     if (federalBtn) {
       federalBtn.addEventListener('click', openFederalDialog);
+    }
+
+    var searchEl = root.querySelector('[data-ga-map-search]');
+    if (searchEl) {
+      searchEl.addEventListener('input', function () {
+        renderList();
+        refreshChart();
+      });
+    }
+    function bindSlider(selector) {
+      var track = root.querySelector(selector);
+      if (!track) return;
+      track.addEventListener('click', function (e) {
+        var btn = e.target.closest('.ga-jur__opt');
+        if (!btn || !track.contains(btn)) return;
+        var opts = track.querySelectorAll('.ga-jur__opt');
+        for (var i = 0; i < opts.length; i++) {
+          var on = opts[i] === btn;
+          opts[i].classList.toggle('is-on', on);
+          opts[i].setAttribute('aria-checked', on ? 'true' : 'false');
+        }
+        var value = btn.getAttribute('data-ga-jur');
+        if (value == null) value = btn.getAttribute('data-ga-kind') || '';
+        track.setAttribute('data-jur', value);
+        renderList();
+        refreshChart();
+      });
+    }
+    bindSlider('[data-ga-map-jur]');
+    bindSlider('[data-ga-map-kind]');
+    if (searchEl || root.querySelector('[data-ga-map-jur]') || root.querySelector('[data-ga-map-kind]')) {
+      window.GA_POLICY_MAP_FILTERS = true;
     }
 
     groupPolicies();

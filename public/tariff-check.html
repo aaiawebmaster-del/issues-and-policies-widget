@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Tariff tracker check</title>
+  <style>
+    :root { --ink: #1a242c; --charcoal: #2b3942; --muted: #5b6b75; --line: #e5eaee; --orange: #e87722; --orange-deep: #c45f12; --surface: #f5f7f8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: var(--surface); line-height: 1.45; }
+    main { max-width: 60rem; margin: 0 auto; padding: 2rem 1rem 4rem; display: grid; gap: 1.25rem; }
+    h1 { margin: 0; font-size: 1.5rem; color: var(--charcoal); }
+    h2 { margin: 0; font-size: 1.1rem; color: var(--charcoal); }
+    h3 { margin: 0.5rem 0 0; font-size: 0.95rem; color: var(--charcoal); }
+    p { margin: 0; }
+    a { color: var(--orange-deep); }
+    code { background: #eef2f4; padding: 0.1rem 0.3rem; font-size: 0.9em; }
+    .panel { background: #fff; border: 1px solid var(--line); padding: 1.15rem 1.25rem; display: grid; gap: 0.85rem; }
+    .muted { color: var(--muted); font-size: 0.9rem; }
+    label { display: grid; gap: 0.3rem; font-weight: 700; font-size: 0.85rem; color: var(--charcoal); }
+    input, textarea, select { width: 100%; padding: 0.55rem 0.65rem; border: 1px solid #c9d2d8; border-radius: 0; font: inherit; font-size: 0.92rem; color: var(--ink); background: #fff; }
+    textarea { min-height: 9rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }
+    .row { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+    .row label.inline { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; }
+    .row label.inline input { width: auto; }
+    button { appearance: none; padding: 0.6rem 1.1rem; border: 1px solid var(--orange-deep); border-radius: 0; background: var(--orange-deep); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+    button.secondary { background: #fff; color: var(--orange-deep); }
+    button:disabled { opacity: 0.6; cursor: wait; }
+    .error { padding: 0.75rem 0.9rem; border-left: 4px solid #b42318; background: #fdeceb; color: #7a1a12; }
+    .warn { padding: 0.65rem 0.9rem; border-left: 4px solid var(--orange); background: #fdf0e5; }
+    .warn ul { margin: 0.3rem 0 0; padding-left: 1.1rem; }
+    .head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; }
+    .status { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.7rem; border: 1px solid #d5dde2; border-radius: 999px; background: #eef2f4; font-size: 0.82rem; font-weight: 800; }
+    .status::before { content: ""; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: currentColor; }
+    .status--in-effect { border-color: #b7dcc7; background: #e8f5ee; color: #1b7a45; }
+    .status--modified { border-color: #f6cfae; background: #fdf0e5; color: var(--orange-deep); }
+    .status--pending { border-color: #c4cfe2; background: #edf1f8; color: #1c3664; }
+    .status--revoked, .status--superseded { border-color: #f1c3be; background: #fdeceb; color: #b42318; }
+    dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0 1.25rem; margin: 0; border-top: 1px solid var(--line); }
+    dl > div { padding: 0.55rem 0; border-bottom: 1px solid var(--line); }
+    dl > div.wide { grid-column: 1 / -1; }
+    dt { color: var(--muted); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+    dd { margin: 0.1rem 0 0; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); }
+    table { width: 100%; min-width: 32rem; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { padding: 0.55rem 0.75rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    thead th { background: var(--surface); color: var(--muted); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; }
+    td.rate { font-weight: 800; white-space: nowrap; }
+    ol.timeline { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.85rem; }
+    ol.timeline li { position: relative; padding-left: 1.4rem; }
+    ol.timeline li::before { content: ""; position: absolute; left: 0; top: 0.35rem; width: 0.65rem; height: 0.65rem; border: 2px solid #b9c4cc; border-radius: 50%; background: #fff; }
+    ol.timeline li.primary::before { border-color: var(--charcoal); background: var(--charcoal); }
+    ol.timeline li:first-child::before { border-color: var(--orange); background: var(--orange); }
+    .date { color: var(--muted); font-size: 0.8rem; font-weight: 700; }
+    .badge { display: inline-block; padding: 0.1rem 0.45rem; margin-right: 0.35rem; background: #eef2f4; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+    .badge.primary { background: var(--charcoal); color: #fff; }
+    .small { font-size: 0.82rem; color: var(--muted); }
+    details { border: 1px solid var(--line); background: var(--surface); padding: 0.6rem 0.85rem; }
+    summary { font-weight: 700; cursor: pointer; }
+    details ul { margin: 0.5rem 0 0; padding-left: 1.1rem; display: grid; gap: 0.35rem; font-size: 0.88rem; }
+    pre { margin: 0; max-height: 24rem; overflow: auto; padding: 0.75rem; background: #1a242c; color: #e5eaee; font-size: 0.78rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Tariff tracker check</h1>
+      <p class="muted">Preview what the Policy detail widget will show for a <code>Bill number</code> + <code>Tariff_tracking</code> combination before you save it in Sitefinity.</p>
+    </header>
+
+    <form class="panel" id="form">
+      <label><span>Proxy key (<code>x-ga-policy-key</code>)</span>
+        <input type="password" id="key" autocomplete="off" placeholder="Same value as PN_PROXY_KEY in the Sitefinity templates" />
+      </label>
+      <p class="small">Kept in this browser tab only (sessionStorage). Leave blank if the proxy has no key configured.</p>
+
+      <label>Start from a program
+        <select id="seed">
+          <option value="">Custom</option>
+          <option value="ieepa">IEEPA (Canada, Mexico, China)</option>
+          <option value="reciprocal">Reciprocal tariffs</option>
+          <option value="s232">Section 232 steel and aluminum</option>
+          <option value="s301">Section 301 China</option>
+        </select>
+      </label>
+
+      <label>Bill number (primary document)
+        <input type="text" id="bill" placeholder="EO 14257, Proc 10896 or 2026-20510" />
+      </label>
+
+      <label>Tariff_tracking (one entry per line)
+        <textarea id="tracking" spellcheck="false" placeholder="EO 14266&#10;HTS 9903.01.25&#10;status: Ended by EO 14389"></textarea>
+      </label>
+
+      <div class="row">
+        <button type="submit" id="go">Check</button>
+        <label class="inline"><input type="checkbox" id="refresh" /> Skip the 6-hour cache</label>
+      </div>
+      <p class="small">Entries: <code>EO 14257</code>, <code>Proc 10896</code>, <code>2026-20510</code> (FR document), <code>HTS 9903.01.25</code>, <code>status: …</code>, <code>authority: …</code>, <code>docket: …</code>, <code>search: …</code>, <code>agency: …</code>. See the README for the full syntax.</p>
+    </form>
+
+    <div id="out" aria-live="polite"></div>
+  </main>
+
+  <script>
+    (function () {
+      var SEEDS = {
+        ieepa: { bill: 'EO 14193', tracking: 'EO 14194\nEO 14195\nEO 14226\nEO 14228\nEO 14231\nEO 14232\nEO 14389\nHTS 9903.01.01\nHTS 9903.01.10\nHTS 9903.01.20' },
+        reciprocal: { bill: 'EO 14257', tracking: 'EO 14259\nEO 14266\nEO 14298\nEO 14389\nHTS 9903.01.25' },
+        s232: { bill: 'Proc 10896', tracking: 'Proc 10895\nProc 10947\nProc 11021\nProc 11032\nHTS 9903.82.02\nHTS 9903.82.09' },
+        s301: { bill: '2026-20510', tracking: 'search: "section 301" china "technology transfer"\nagency: trade-representative-office-of-united-states\nHTS 9903.88.01\nHTS 9903.88.02\nHTS 9903.88.03\nHTS 9903.88.15' }
+      };
+      var KEY_STORE = 'gaTariffCheckKey';
+      var $ = function (id) { return document.getElementById(id); };
+      var out = $('out');
+
+      try { $('key').value = sessionStorage.getItem(KEY_STORE) || ''; } catch (e) {}
+
+      $('seed').addEventListener('change', function () {
+        var s = SEEDS[this.value];
+        if (!s) return;
+        $('bill').value = s.bill;
+        $('tracking').value = s.tracking;
+      });
+
+      function el(tag, attrs, children) {
+        var node = document.createElement(tag);
+        if (attrs) Object.keys(attrs).forEach(function (k) {
+          if (attrs[k] == null || attrs[k] === '') return;
+          if (k === 'text') node.textContent = attrs[k];
+          else if (k === 'class') node.className = attrs[k];
+          else node.setAttribute(k, attrs[k]);
+        });
+        (children || []).forEach(function (c) { if (c != null && c !== '') node.append(c); });
+        return node;
+      }
+      function link(href, text) {
+        if (!href) return document.createTextNode(text || '');
+        return el('a', { href: href, target: '_blank', rel: 'noopener noreferrer', text: text || href });
+      }
+      function fmt(iso) {
+        if (!iso) return '';
+        var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+        if (!m) return iso;
+        return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+      }
+      function names(list) {
+        return (list || []).map(function (a) { return typeof a === 'string' ? a : (a && a.name) || ''; }).filter(Boolean).join(', ');
+      }
+      function fact(label, value, wide) {
+        if (value == null || value === '' || (Array.isArray(value) && !value.length)) return null;
+        return el('div', { class: wide ? 'wide' : '' }, [el('dt', { text: label }), el('dd', null, Array.isArray(value) ? value : [value])]);
+      }
+
+      function render(data, ids) {
+        out.textContent = '';
+        var st = data.status || {};
+        var kd = data.keyDetails || {};
+        var panel = el('section', { class: 'panel' });
+
+        var key = st.key || 'unknown';
+        var reasonDate = fmt(st.asOf);
+        var reason = (st.reason || '') + (reasonDate ? ((key === 'in-effect' || key === 'pending') ? ' ' : ' · ') + reasonDate : '');
+        panel.append(el('div', { class: 'head' }, [el('h2', { text: 'Tariff status' }), el('span', { class: 'status status--' + key, text: st.label || 'Unknown' })]));
+        if (reason.trim()) panel.append(el('p', { class: 'muted', text: reason }));
+
+        var dl = el('dl');
+        [
+          fact('Legal authority', kd.authority),
+          kd.label ? fact('Primary action', [el('strong', { text: kd.label }), kd.type ? ' (' + kd.type + ') ' : ' ', link(kd.url, kd.title)], true) : null,
+          fact('Signed', fmt(kd.signedDate)),
+          fact('Published', fmt(kd.publicationDate) + (kd.citation ? ' · ' + kd.citation : '')),
+          fact('Effective', fmt(kd.effectiveDate)),
+          kd.latestLabel && kd.latestLabel !== kd.label ? fact('Latest action', [el('strong', { text: kd.latestLabel }), ' · ' + fmt(kd.latestDate) + ' ', link(kd.latestUrl, kd.latestTitle)], true) : null,
+          fact('Agencies', names(kd.agencies), true)
+        ].forEach(function (f) { if (f) dl.append(f); });
+        if (dl.children.length) panel.append(dl);
+
+        var rates = data.rates || [];
+        if (rates.length) {
+          var tbody = el('tbody');
+          rates.forEach(function (r) {
+            var rate = r.found ? (r.rate || r.general || 'See HTS') : 'Not found in the HTS';
+            tbody.append(el('tr', null, [el('th', { scope: 'row' }, [link(r.url, r.heading)]), el('td', { class: 'rate', text: rate }), el('td', { class: 'small', text: r.description || '' })]));
+          });
+          panel.append(el('h3', { text: 'Current rates' }), el('div', { class: 'table-wrap' }, [el('table', null, [
+            el('thead', null, [el('tr', null, [el('th', { scope: 'col', text: 'HTS heading' }), el('th', { scope: 'col', text: 'Additional duty' }), el('th', { scope: 'col', text: 'Applies to' })])]),
+            tbody
+          ])]));
+        }
+
+        var timeline = data.timeline || [];
+        if (timeline.length) {
+          var ol = el('ol', { class: 'timeline' });
+          timeline.forEach(function (t) {
+            var extra = [];
+            if (t.effectiveDate) extra.push('Effective ' + fmt(t.effectiveDate));
+            if (t.commentsCloseDate) extra.push('Comments due ' + fmt(t.commentsCloseDate));
+            ol.append(el('li', { class: t.relation === 'primary' ? 'primary' : '' }, [
+              el('div', { class: 'date', text: fmt(t.date) }),
+              el('div', null, [el('span', { class: 'badge', text: t.type }), el('strong', { text: t.label }), t.relation === 'primary' ? el('span', { class: 'badge primary', text: 'Primary action', style: 'margin-left:0.4rem' }) : null]),
+              el('div', null, [link(t.url, t.title)]),
+              extra.length ? el('div', { class: 'small', text: extra.join(' · ') }) : null,
+              t.via ? el('div', { class: 'small', text: (t.via.indexOf('Docket ') === 0 ? 'From docket ' + t.via.slice(7) : 'From a tracked Federal Register search') }) : null
+            ]));
+          });
+          panel.append(el('h3', { text: 'Timeline (' + timeline.length + ')' }), ol);
+          if (timeline.length > 8) panel.append(el('p', { class: 'small', text: 'The Policy page shows the 8 newest and hides the rest behind a "Show earlier actions" button.' }));
+        }
+
+        var related = data.relatedActions || [];
+        if (related.length) {
+          var ul = el('ul');
+          related.forEach(function (r) {
+            ul.append(el('li', null, [el('span', { class: 'date', text: fmt(r.date) + ' ' }), el('span', { class: 'badge', text: r.relation }), link(r.url, r.label + (r.title ? ': ' + r.title : ''))]));
+          });
+          panel.append(el('details', null, [el('summary', { text: 'Related actions listed by the Federal Register (' + related.length + ')' }), ul]));
+        }
+
+        panel.append(el('p', { class: 'small', text: 'Cache: ' + (data.cache || 'n/a') + (data.cachedAt ? ' · built ' + new Date(data.cachedAt).toLocaleString() : '') }));
+
+        if ((data.warnings || []).length) {
+          var wl = el('ul');
+          data.warnings.forEach(function (w) { wl.append(el('li', { text: String(w) })); });
+          out.append(el('div', { class: 'warn' }, [el('strong', { text: 'Warnings' }), wl]));
+        }
+        out.append(panel);
+
+        var raw = el('details', null, [el('summary', { text: 'Raw response' }), el('pre', { text: JSON.stringify(data, null, 2) })]);
+        out.append(raw);
+        out.append(el('p', { class: 'small', text: 'Request ids: ' + ids.replace(/\n/g, ' | ') }));
+      }
+
+      $('form').addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var key = $('key').value.trim();
+        try { if (key) sessionStorage.setItem(KEY_STORE, key); else sessionStorage.removeItem(KEY_STORE); } catch (e) {}
+
+        var bill = $('bill').value.trim();
+        var lines = $('tracking').value.split(/\r?\n|\|/).map(function (s) { return s.trim(); }).filter(Boolean);
+        var norm = function (s) { return s.toLowerCase().replace(/[^a-z0-9]/g, ''); };
+        var ids = (bill ? [bill] : []).concat(lines.filter(function (l) { return !bill || norm(l) !== norm(bill); })).join('\n');
+        if (!ids) {
+          out.textContent = '';
+          out.append(el('p', { class: 'error', text: 'Enter a Bill number or at least one Tariff_tracking line.' }));
+          return;
+        }
+
+        var btn = $('go');
+        btn.disabled = true;
+        btn.textContent = 'Checking…';
+        out.textContent = '';
+        out.append(el('p', { class: 'muted', text: 'Loading from the Federal Register and USITC…' }));
+
+        var url = '/api/policy-note/tariff?ids=' + encodeURIComponent(ids) + ($('refresh').checked ? '&refresh=1' : '');
+        var headers = { Accept: 'application/json' };
+        if (key) headers['x-ga-policy-key'] = key;
+
+        fetch(url, { headers: headers })
+          .then(function (res) { return res.json().catch(function () { return {}; }).then(function (body) { return { res: res, body: body }; }); })
+          .then(function (r) {
+            if (!r.res.ok) {
+              out.textContent = '';
+              var msg = r.res.status === 401 ? 'The proxy key is missing or wrong (401).' : (r.body.error || ('Request failed (' + r.res.status + ')'));
+              out.append(el('p', { class: 'error', text: msg }));
+              return;
+            }
+            render(r.body, ids);
+          })
+          .catch(function (err) {
+            out.textContent = '';
+            out.append(el('p', { class: 'error', text: 'Network error: ' + err.message }));
+          })
+          .finally(function () {
+            btn.disabled = false;
+            btn.textContent = 'Check';
+          });
+      });
+    })();
+  </script>
+</body>
+</html>

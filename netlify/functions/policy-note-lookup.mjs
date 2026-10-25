@@ -60,7 +60,7 @@ export async function handler(event) {
     if (isExecutiveOrder(billNumber)) {
       const order = await resolveExecutiveOrder(billNumber, ttlHours, flag(event, 'refresh'));
       if (order && order.notFound) {
-        return jsonResponse(404, { error: `No executive order found for "${billNumber}"`, code: 'NOT_FOUND', cache: order.cache || 'miss' });
+        return jsonResponse(404, { error: `No Federal Register document found for "${billNumber}"`, code: 'NOT_FOUND', cache: order.cache || 'miss' });
       }
       return jsonResponse(200, order);
     }
