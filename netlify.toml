@@ -48,6 +48,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/legislators"
+  to = "/.netlify/functions/legislator-lookup"
+  status = 200
+
+[[redirects]]
   from = "/api/congress/bill"
   to = "/.netlify/functions/policy-note-lookup"
   status = 200

@@ -1,6 +1,7 @@
 import { resolveCongressBill } from './lib/congress.mjs';
 import { connectBlobs } from './lib/cache.mjs';
 import { assertProxyKey, corsHeaders, jsonResponse } from './lib/http.mjs';
+import { getOpenStatesKey } from './lib/openstates.mjs';
 import { checkAppData, checkAuth, getApiKey, getBaseUrl } from './lib/policy-note-client.mjs';
 
 export async function handler(event) {
@@ -19,6 +20,7 @@ export async function handler(event) {
     hasBearer: hasApiKey,
     hasProxyKey,
     hasCongressKey: Boolean(String(process.env.CONGRESS_API_KEY || '').trim()),
+    hasOpenStatesKey: Boolean(getOpenStatesKey()),
     baseUrl: getBaseUrl(),
     endpoints: {
       lookup: '/api/policy-note/lookup?bill=  (H.R. 906, OR HB 4144, or Federal Register document number 2026-21599)',
@@ -31,6 +33,7 @@ export async function handler(event) {
       health: '/api/policy-note/health',
       authCheck: '/api/policy-note/health?check=1',
       congress: '/api/congress/bill?bill=H.R. 906',
+      legislators: '/api/legislators?street=&zip=  or  ?lat=&lng=  (public; autocare.org origins only)',
     },
   };
 
