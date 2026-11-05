@@ -58,6 +58,14 @@ Bill numbers that are a Federal Register identifier are answered from the Federa
 `EO 14257`, `Proc 10896` (or `Proclamation 10896`), `FR 2026-20510`. Executive orders and proclamations come back as
 `kind: "executive-order"`; agency notices and rules as `kind: "regulation"` with agencies, publication / effective dates and comment deadline.
 
+## Session years
+
+States reuse bill numbers every session, and a plain number (`MA H 3757`) matches the newest bill with that number.
+Add the session year to pin an older bill: `MA H 3757 2013`, `MA H 3757 (2013)` or `MA H 3757 2013-2014`.
+Only a PolicyNote bill from that session is accepted (its session code, then session name, then introduction date);
+with none, the lookup is `notFound` and the page keeps its manual fields. On a federal bill the year picks the congress
+(`HR 906 2025` → 119th). A number that is itself a year (`OR HB 2013`) is read as the bill.
+
 ## Tariff tracker
 
 `GET /api/policy-note/tariff?ids=EO 14257|EO 14266|HTS 9903.01.25` (or `POST {"ids": "one\nper\nline"}`). Cached 6 hours; `&refresh=1` rebuilds.

@@ -1,4 +1,5 @@
 import {
+  billInSession,
   normalizeLegislationRecord,
   normalizeRegulationRecord,
   normalizeTeamData,
@@ -150,20 +151,24 @@ function billsFrom(payload) {
   return results.map((r) => (r && r.bill ? r.bill : r)).filter(Boolean);
 }
 
-/** Exact id match first (newest introduction wins when a number repeats across sessions), then a number-only match */
+/**
+ * Exact id match first (newest introduction wins when a number repeats across sessions), then a number-only match.
+ * A session year on the bill number ("MA H 3757 2013") only accepts bills from that session.
+ */
 function chooseBest(bills, parsed) {
   const byNewest = (a, b) => String(b.introduction_date || '').localeCompare(String(a.introduction_date || ''));
-  const exact = bills.filter((b) => recordBillKeys(b).some((k) => parsed.keys.includes(k))).sort(byNewest);
-  if (exact.length) return { record: exact[0], matched: 'exact' };
+  const pool = parsed.session ? bills.filter((b) => billInSession(b, parsed.session)) : bills;
+  const exact = pool.filter((b) => recordBillKeys(b).some((k) => parsed.keys.includes(k))).sort(byNewest);
+  if (exact.length) return { record: exact[0], matched: parsed.session ? 'exact+session' : 'exact' };
   if (!parsed.locality) {
-    const loose = bills.filter((b) => recordBillKeys(b).some((k) => k.endsWith(parsed.numberKey))).sort(byNewest);
+    const loose = pool.filter((b) => recordBillKeys(b).some((k) => k.endsWith(parsed.numberKey))).sort(byNewest);
     if (loose.length === 1) return { record: loose[0], matched: 'number' };
   }
   return null;
 }
 
 /**
- * Find a bill by number (e.g. "OR HB 4144", "H.R. 906", "US S 1379").
+ * Find a bill by number (e.g. "OR HB 4144", "H.R. 906", "US S 1379", "MA H 3757 2013").
  * Searches the current session first, then all sessions.
  */
 export async function searchLegislation(billNumber) {
@@ -184,8 +189,14 @@ export async function searchLegislation(billNumber) {
     if (best) return { ...best, payload, query: { ...base, ...scope } };
   }
 
-  const seen = payloads.flatMap((p) => billsFrom(p).map((b) => b.primary_external_id)).filter(Boolean).slice(0, 10);
-  throw fail(`No legislation found for "${billNumber}"`, 'NOT_FOUND', { details: seen.length ? `Closest results: ${seen.join(', ')}` : null });
+  const sessionText = parsed.session ? (parsed.session.to > parsed.session.from ? `${parsed.session.from}–${parsed.session.to}` : String(parsed.session.from)) : '';
+  const seen = payloads
+    .flatMap((p) => billsFrom(p).map((b) => (b.primary_external_id ? `${b.primary_external_id}${parsed.session ? ` (${b.session || String(b.introduction_date || '').slice(0, 4) || '?'})` : ''}` : '')))
+    .filter(Boolean)
+    .slice(0, 10);
+  throw fail(`No legislation found for "${billNumber}"${sessionText ? ` in the ${sessionText} session` : ''}`, 'NOT_FOUND', {
+    details: seen.length ? `Closest results: ${seen.join(', ')}` : null,
+  });
 }
 
 /** Projects (legacy "issues") and tags (legacy "labels") from a fiscalnote_app_data / pn_app_data block */

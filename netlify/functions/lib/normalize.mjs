@@ -189,11 +189,52 @@ export function billIdKey(id) {
 }
 
 /**
+ * Trailing session year on a CMS bill number: "MA H 3757 2013", "MA H 3757 (2013)", "MA H 3757 2013-2014".
+ * The rest must still end in a bill number, so "OR HB 2013" and "119 HR 2025" stay bills.
+ * → { rest: "MA H 3757", session: { from: 2013, to: 2013 } }; session is null when there is no year.
+ */
+export function splitSessionYear(raw) {
+  const s = text(raw);
+  const m = s.match(/[\s(,]+\(?\s*((?:19|20)\d{2})(?:\s*[-–/]\s*((?:19|20)?\d{2}))?\s*\)?\s*$/);
+  if (!m) return { rest: s, session: null };
+  const rest = s.slice(0, m.index).trim();
+  if (!/\d$/.test(rest)) return { rest: s, session: null };
+  const from = Number(m[1]);
+  let to = from;
+  if (m[2]) to = m[2].length === 2 ? Math.floor(from / 100) * 100 + Number(m[2]) : Number(m[2]);
+  if (to < from || to - from > 3) to = from;
+  return { rest, session: { from, to } };
+}
+
+/**
+ * Does a PolicyNote bill belong to the session year(s) asked for?
+ * Session code ("20132014r") first, then years in the session name, then the introduction date (a November/December prefile counts for the next year).
+ */
+export function billInSession(bill, session) {
+  if (!session) return true;
+  const years = [];
+  const code = text(bill?.session).match(/^(\d{4})(\d{4})?/);
+  if (code) {
+    for (let y = Number(code[1]); y <= Number(code[2] || code[1]); y++) years.push(y);
+  }
+  if (!years.length) {
+    for (const y of text(bill?.session_name).match(/\b(?:19|20)\d{2}\b/g) || []) years.push(Number(y));
+  }
+  if (years.length) return years.some((y) => y >= session.from && y <= session.to);
+  const intro = text(bill?.introduction_date).match(/^(\d{4})-(\d{2})/);
+  if (!intro) return false;
+  const year = Number(intro[1]);
+  return (year >= session.from && year <= session.to) || (year === session.from - 1 && Number(intro[2]) >= 11);
+}
+
+/**
  * Split a CMS bill number into PolicyNote search parts.
  * "OR HB 4144" → { locality: "US-OR", number: "HB 4144" }; "H.R. 906" → { locality: "US", number: "HR 906" }
+ * "MA H 3757 2013" → { locality: "US-MA", number: "H 3757", session: { from: 2013, to: 2013 } }
  */
 export function parseBillNumber(raw) {
-  let s = text(raw).toUpperCase().replace(/\./g, ' ').replace(/\s+/g, ' ').trim();
+  const { rest, session } = splitSessionYear(raw);
+  let s = rest.toUpperCase().replace(/\./g, ' ').replace(/\s+/g, ' ').trim();
   let locality = '';
   for (const [name, hc] of Object.entries(STATE_NAME_TO_KEY)) {
     const upper = name.toUpperCase();
@@ -224,7 +265,7 @@ export function parseBillNumber(raw) {
       if (!keys.includes(k)) keys.push(k);
     }
   }
-  return { locality, number, numberKey: billIdKey(number), key, keys };
+  return { locality, number, numberKey: billIdKey(number), key, keys, session };
 }
 
 /** Every comparable id PolicyNote lists for a bill (primary id plus source ids) */

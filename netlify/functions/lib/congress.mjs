@@ -56,6 +56,33 @@ function plain(html, max) {
   return s;
 }
 
+/** Bump when summaryText changes so cached summaries in the old format are fetched again */
+const SUMMARY_FORMAT = 2;
+
+/* CRS version label at the start of a summary: "(LATEST SUMMARY)", "(Introduced)", "(Reported to Senate amended)" */
+const SUMMARY_LABEL = /^\s*\((?:latest summary|introduced|reported[^)]{0,60}|passed[^)]{0,60}|public law|engrossed[^)]{0,60}|enrolled[^)]{0,60}|conference report[^)]{0,60})\)\s*/i;
+
+/**
+ * CRS summary HTML as plain paragraphs separated by a blank line.
+ * Drops the version label; older summaries' "=Title I: Heading= - text" becomes its own "Title I: Heading — text" paragraph.
+ */
+export function summaryText(html, max) {
+  let s = text(html)
+    .replace(/<\/p>|<br\s*\/?>/gi, '\n\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;|&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+  s = s.replace(SUMMARY_LABEL, '');
+  s = s.replace(/\s*-?\s*=([^=\n]{2,200})=\s*-?\s*/g, '\n\n$1 — ');
+  s = s.split(/\n\s*\n/).map((p) => p.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n\n');
+  if (max && s.length > max) s = `${s.slice(0, max - 3).trimEnd()}...`;
+  return s;
+}
+
 /** Congress in session on this date. A congress begins January 3 of each odd year. */
 export function currentCongress(date = new Date()) {
   let year = date.getUTCFullYear();
@@ -82,15 +109,21 @@ export function parseFederalBill(raw) {
   if (parsed.locality && parsed.locality !== 'US') return null;
   let number = parsed.number;
   let congress = null;
-  const lead = number.match(/^(\d{3})\s+(.+)$/);
+  const lead = number.match(/^(\d{2,3})\s+(.+)$/);
   if (lead && Number(lead[1]) >= 93 && Number(lead[1]) <= 200) {
     congress = Number(lead[1]);
     number = lead[2];
   }
-  const trail = number.match(/^(.+?)\s+(\d{3})$/);
+  /* A trailing congress needs a full bill before it, so "HR 150" stays H.R. 150 */
+  const trail = number.match(/^([A-Z]+\s+\d+)\s+(\d{2,3})$/);
   if (!congress && trail && Number(trail[2]) >= 93 && Number(trail[2]) <= 200) {
     congress = Number(trail[2]);
     number = trail[1];
+  }
+  /* A session year ("HR 906 2025") picks the congress in session that year */
+  if (!congress && parsed.session) {
+    const fromYear = currentCongress(new Date(Date.UTC(parsed.session.from, 6, 1)));
+    if (fromYear >= 93 && fromYear <= 200) congress = fromYear;
   }
   const match = number.match(/^(HR|HB|S|SB|HRES|SRES|HJRES|SJRES|HCONRES|SCONRES)\s+(\d+)$/);
   if (!match) return null;
@@ -141,7 +174,8 @@ function normalizeCongressBill(bill, requested, summaryHtml) {
     const page = congress && number
     ? `https://www.congress.gov/bill/${ordinal(congress).toLowerCase()}-congress/${slug}/${number}`
     : '';
-  const summary = plain(summaryHtml, 1200);
+  const overview = summaryText(summaryHtml, 8000);
+  const summary = plain(overview, 600);
 
   return {
     kind: 'legislation',
@@ -165,8 +199,8 @@ function normalizeCongressBill(bill, requested, summaryHtml) {
     lastAction: plain(bill.latestAction && bill.latestAction.text, 240),
     lastActionDate: text(bill.latestAction && bill.latestAction.actionDate).slice(0, 10),
     sponsors,
-    summary: summary.slice(0, 600),
-    overview: summary,
+    summary,
+    overview,
     officialUrl: page,
     projects: [],
     tags: [],
@@ -178,6 +212,7 @@ function normalizeCongressBill(bill, requested, summaryHtml) {
     teamLinks: [],
     cachedAt: new Date().toISOString(),
     source: 'congress',
+    summaryFormat: SUMMARY_FORMAT,
   };
 }
 
@@ -242,7 +277,8 @@ export async function resolveCongressBill(bill, ttlHours, refresh) {
   if (!isFederalBill(bill)) return null;
   if (!refresh) {
     const cached = await getCachedLookup(bill);
-    if (cached && cached.source === 'congress' && isCacheFresh(cached, ttlHours)) {
+    const current = cached && (cached.notFound || cached.summaryFormat === SUMMARY_FORMAT);
+    if (cached && cached.source === 'congress' && current && isCacheFresh(cached, ttlHours)) {
       return { ...cached, cache: 'hit' };
     }
   }
